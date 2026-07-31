@@ -1,0 +1,277 @@
+#!/usr/bin/env python
+"""
+TimeTrax CLI — query and manage tickets without the web server.
+
+Usage:
+    tt list                    # all open tickets (default)
+    tt list --all              # all tickets including closed
+    tt list --client <id>      # filter by client id
+    tt list --status <s>       # filter by status (open, closed)
+    tt show <id>               # full ticket detail with comments & work notes
+    tt create <client_id> "<title>" [--desc "<desc>"] [--priority H|M|L]
+    tt close <id>              # close a ticket
+    tt reopen <id>             # reopen a closed ticket
+    tt comment <id> "<body>"   # add a comment
+    tt work <id> <hours> "<body>"  # log work hours
+    tt clients                 # list all clients
+    tt search "<query>"        # search by title
+
+Runs Django ORM directly — no web server required.
+"""
+import os
+import sys
+import argparse
+from datetime import datetime, timedelta
+from decimal import Decimal
+
+# ── Django setup ──────────────────────────────────────────────────────────
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, BASE_DIR)
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+# ── Django ORM session ────────────────────────────────────────────────────
+import django; django.setup()
+from django.utils import timezone
+from tickets.models import Client, Item, Comment, WorkNote
+
+# ── Helpers ───────────────────────────────────────────────────────────────
+
+PRIO_COLORS = {"H": "\033[91m", "M": "\033[93m", "L": "\033[90m"}
+RESET = "\033[0m"
+BOLD = "\033[1m"
+DIM = "\033[2m"
+
+def age_days(dt):
+    if not dt: return 0
+    return (timezone.now() - dt).days if timezone.is_aware(dt) else (timezone.now().replace(tzinfo=None) - dt).days
+
+def fmt_age(days):
+    if days > 90: return f"\033[91m{days}d\033[0m"
+    if days > 21: return f"\033[93m{days}d\033[0m"
+    return f"{days}d"
+
+def fmt_ticket(t, full=False):
+    prio_color = PRIO_COLORS.get(t.priority, "")
+    days = age_days(t.created_at)
+    client_name = t.client.name if t.client else "?"
+    assignee = t.assignee.get_full_name() or t.assignee.username if t.assignee else "—"
+    status_icon = "\033[92m✓\033[0m" if t.status == "closed" else "\033[93m○\033[0m"
+
+    line = f"{status_icon} {prio_color}{t.priority:1s}{RESET}  "
+    line += f"\033[1m#{t.id:>4d}\033[0m  "
+    line += f"{t.title[:72]:72s}  "
+    line += f"{fmt_age(days):>5s}  "
+    line += f"{client_name[:20]:20s}  "
+    line += f"{assignee[:15]:15s}"
+    return line
+
+def fmt_ticket_full(t):
+    """Multi-line detailed ticket view."""
+    days = age_days(t.created_at)
+    client_name = t.client.name if t.client else "?"
+    assignee = t.assignee.get_full_name() or t.assignee.username if t.assignee else "—"
+    creator = t.created_by.get_full_name() or t.created_by.username if t.created_by else "—"
+
+    lines = []
+    lines.append(f"{'='*75}")
+    lines.append(f"  {BOLD}#{t.id}{RESET}  {t.ticket_number or '—':>8s}  {BOLD}{t.title}{RESET}")
+    lines.append(f"{'='*75}")
+    lines.append(f"  Status:   {t.status:<10s}  Priority: {t.priority:<4s}  Age: {days}d")
+    lines.append(f"  Client:   {client_name}")
+    lines.append(f"  Assignee: {assignee}")
+    lines.append(f"  Created:  {t.created_by} ({creator})")
+    lines.append(f"  Created:  {t.created_at.strftime('%Y-%m-%d %H:%M')}" +
+                 (f"  Closed: {t.closed_at.strftime('%Y-%m-%d %H:%M')}" if t.closed_at else ""))
+    lines.append(f"  Hours:    {t.total_hours}h" if hasattr(t, 'total_hours') else "")
+    if t.description:
+        lines.append(f"\n  {BOLD}Description:{RESET}")
+        for l in t.description.strip().split("\n"):
+            lines.append(f"    {l}")
+
+    # Comments
+    comments = t.comments.all().order_by("created_at")
+    if comments:
+        lines.append(f"\n  {BOLD}Comments ({len(comments)}):{RESET}")
+        for c in comments:
+            src = f"[{c.get_source_display()}]" if hasattr(c, 'get_source_display') else ""
+            author = c.author.username if c.author else "?"
+            lines.append(f"  {DIM}{c.created_at.strftime('%m/%d %H:%M')}{RESET} {author} {src}")
+            for l in c.body.strip().split("\n"):
+                lines.append(f"    {l}")
+
+    # Work notes
+    wnotes = t.work_notes.all().order_by("created_at")
+    if wnotes:
+        lines.append(f"\n  {BOLD}Work Notes ({len(wnotes)}):{RESET}")
+        for w in wnotes:
+            author = w.author.username if w.author else "?"
+            lines.append(f"  {DIM}{w.created_at.strftime('%m/%d %H:%M')}{RESET} {author}  {w.hours}h")
+            for l in w.body.strip().split("\n"):
+                lines.append(f"    {l}")
+
+    return "\n".join(lines)
+
+# ── Commands ──────────────────────────────────────────────────────────────
+
+def cmd_list(args):
+    qs = Item.objects.all()
+    if not getattr(args, "all", False) and not args.status:
+        qs = qs.filter(status=Item.Status.OPEN)
+    if args.status:
+        qs = qs.filter(status=args.status.lower())
+    if args.client:
+        qs = qs.filter(client_id=args.client)
+
+    qs = qs.select_related("client", "assignee").order_by("-updated_at")
+    total = qs.count()
+    show = qs[:args.limit] if args.limit else qs
+
+    print(f"\n  {BOLD}Tickets ({total} total, showing {len(show)}){RESET}")
+    print(f"  {'':─^75s}")
+    for t in show:
+        print(f"  {fmt_ticket(t)}")
+    print()
+
+def cmd_show(args):
+    try:
+        t = Item.objects.select_related("client", "assignee", "created_by").get(pk=args.id)
+        print(fmt_ticket_full(t))
+    except Item.DoesNotExist:
+        print(f"\033[91mTicket #{args.id} not found.\033[0m")
+
+def cmd_create(args):
+    t = Item.objects.create(
+        client_id=args.client_id,
+        title=args.title,
+        description=args.desc or "",
+        priority=args.priority or Item.Priority.MEDIUM,
+        status=Item.Status.OPEN,
+    )
+    print(f"\033[92mCreated #{t.id}: {t.title}\033[0m")
+
+def cmd_close(args):
+    try:
+        t = Item.objects.get(pk=args.id)
+        t.close()
+        print(f"\033[92mClosed #{t.id}: {t.title}\033[0m")
+    except Item.DoesNotExist:
+        print(f"\033[91mTicket #{args.id} not found.\033[0m")
+
+def cmd_reopen(args):
+    try:
+        t = Item.objects.get(pk=args.id)
+        t.reopen()
+        print(f"\033[92mReopened #{t.id}: {t.title}\033[0m")
+    except Item.DoesNotExist:
+        print(f"\033[91mTicket #{args.id} not found.\033[0m")
+
+def cmd_comment(args):
+    try:
+        t = Item.objects.get(pk=args.id)
+        # Get first operator user as default author
+        author = None
+        try:
+            from tickets.models import User
+            author = User.objects.filter(role="operator").first()
+        except Exception:
+            pass
+        Comment.objects.create(item=t, body=args.body, source=Comment.Source.HERMES, author=author)
+        print(f"\033[92mComment added to #{t.id}\033[0m")
+    except Item.DoesNotExist:
+        print(f"\033[91mTicket #{args.id} not found.\033[0m")
+
+def cmd_work(args):
+    try:
+        t = Item.objects.get(pk=args.id)
+        author = None
+        try:
+            from tickets.models import User
+            author = User.objects.filter(role="operator").first()
+        except Exception:
+            pass
+        WorkNote.objects.create(item=t, body=args.body, hours=Decimal(str(args.hours)), author=author)
+        print(f"\033[92mLogged {args.hours}h to #{t.id}\033[0m")
+    except Item.DoesNotExist:
+        print(f"\033[91mTicket #{args.id} not found.\033[0m")
+
+def cmd_clients(args):
+    clients = Client.objects.all().order_by("name")
+    print(f"\n  {BOLD}Clients ({len(clients)}){RESET}")
+    print(f"  {'':─^40s}")
+    for c in clients:
+        mode = "\033[2mcontract\033[0m" if c.billing_mode == "contract" else "\033[93mhourly\033[0m"
+        ticket_count = c.items.count()
+        print(f"  #\033[1m{c.id:>2d}\033[0m  {c.name:<30s}  {mode:<10s}  {ticket_count} tickets")
+
+def cmd_search(args):
+    qs = Item.objects.filter(title__icontains=args.query)
+    qs = qs.select_related("client", "assignee").order_by("-updated_at")[:20]
+    print(f"\n  {BOLD}Search results for \"{args.query}\":{RESET}")
+    for t in qs:
+        print(f"  {fmt_ticket(t)}")
+
+# ── CLI entry ─────────────────────────────────────────────────────────────
+
+def main():
+    parser = argparse.ArgumentParser(description="TimeTrax CLI — no web server needed")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    # list
+    p = sub.add_parser("list", help="List tickets (default: open)")
+    p.add_argument("--all", action="store_true", help="Include closed")
+    p.add_argument("--status", help="Filter by status (open/closed)")
+    p.add_argument("--client", type=int, help="Filter by client id")
+    p.add_argument("--limit", type=int, default=50, help="Max results")
+    p.set_defaults(func=cmd_list)
+
+    # show
+    p = sub.add_parser("show", help="Show ticket detail")
+    p.add_argument("id", type=int, help="Ticket id")
+    p.set_defaults(func=cmd_show)
+
+    # create
+    p = sub.add_parser("create", help="Create a new ticket")
+    p.add_argument("client_id", type=int, help="Client id")
+    p.add_argument("title", help="Ticket title")
+    p.add_argument("--desc", help="Description")
+    p.add_argument("--priority", choices=["H", "M", "L"], default="M")
+    p.set_defaults(func=cmd_create)
+
+    # close
+    p = sub.add_parser("close", help="Close a ticket")
+    p.add_argument("id", type=int)
+    p.set_defaults(func=cmd_close)
+
+    # reopen
+    p = sub.add_parser("reopen", help="Reopen a ticket")
+    p.add_argument("id", type=int)
+    p.set_defaults(func=cmd_reopen)
+
+    # comment
+    p = sub.add_parser("comment", help="Add a comment")
+    p.add_argument("id", type=int)
+    p.add_argument("body", help="Comment text")
+    p.set_defaults(func=cmd_comment)
+
+    # work
+    p = sub.add_parser("work", help="Log work hours")
+    p.add_argument("id", type=int)
+    p.add_argument("hours", type=float, help="Hours (e.g. 0.5)")
+    p.add_argument("body", help="Work description")
+    p.set_defaults(func=cmd_work)
+
+    # clients
+    p = sub.add_parser("clients", help="List all clients")
+    p.set_defaults(func=cmd_clients)
+
+    # search
+    p = sub.add_parser("search", help="Search tickets by title")
+    p.add_argument("query", help="Search term")
+    p.set_defaults(func=cmd_search)
+
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

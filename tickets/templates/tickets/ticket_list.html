@@ -1,0 +1,45 @@
+{% extends "tickets/base.html" %}
+{% block title %}Tickets · TimeTrax{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Tickets <span class="muted" style="font-weight:500;font-size:15px">· {{ open_count }} open</span></h1>
+  <form method="get" class="filters">
+    <select name="status" onchange="this.form.submit()">
+      <option value="open"   {% if status == 'open' %}selected{% endif %}>Open</option>
+      <option value="closed" {% if status == 'closed' %}selected{% endif %}>Closed</option>
+      <option value="all"    {% if status == 'all' %}selected{% endif %}>All</option>
+    </select>
+    <select name="client" onchange="this.form.submit()">
+      <option value="">All customers</option>
+      {% for c in clients %}
+        <option value="{{ c.id }}" {% if client_id == c.id|stringformat:'s' %}selected{% endif %}>{{ c.name }}</option>
+      {% endfor %}
+    </select>
+  </form>
+</div>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Ticket</th><th>Status</th><th>Title</th><th>Customer</th>
+        <th style="text-align:right">Hours</th><th>Updated</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tickets %}
+      <tr class="click" onclick="location.href='{% url 'tickets:detail' t.pk %}'">
+        <td><span class="pri {{ t.priority }}">{{ t.priority }}</span> <span class="num">{{ t.ticket_number }}</span></td>
+        <td><span class="badge {{ t.status }}">{{ t.get_status_display }}</span></td>
+        <td>{{ t.title }}</td>
+        <td>{{ t.client.name }}</td>
+        <td style="text-align:right" class="num">{{ t.total_hours }}</td>
+        <td class="muted">{{ t.updated_at|date:"M j, g:i a" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="empty">No tickets here. Try a different filter, or <a href="{% url 'tickets:create' %}" style="color:var(--accent);font-weight:600">create one</a>.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

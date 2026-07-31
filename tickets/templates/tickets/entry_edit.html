@@ -1,0 +1,21 @@
+{% extends "tickets/base.html" %}
+{% block title %}Edit {{ kind }} · TimeTrax{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="{% url 'tickets:detail' entry.item.pk %}" class="muted">← Back to {{ entry.item.ticket_number }}</a></div>
+<h1 style="margin-bottom:16px">Edit {{ kind }}</h1>
+<div class="card pad" style="max-width:560px">
+  <form method="post" class="stack">{% csrf_token %}
+    <div class="field"><label>Entry</label>{{ form.body }}{{ form.body.errors }}</div>
+    {% if form.hours %}
+    <div class="field" style="max-width:160px"><label>Hours</label>{{ form.hours }}{{ form.hours.errors }}
+      <div class="help">0.5 = 30 min</div></div>
+    {% endif %}
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div><button class="btn" type="submit">Save</button>
+        <a href="{% url 'tickets:detail' entry.item.pk %}" class="btn subtle">Cancel</a></div>
+      <button class="btn danger" type="submit" name="delete" value="1"
+        onclick="return confirm('Delete this {{ kind|lower }}?')">Delete</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

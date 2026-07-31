@@ -1,0 +1,151 @@
+{% extends "tickets/base.html" %}
+{% block title %}Billing · TimeTrax{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h1>Billing
+    {% if stripe_test_mode %}<span class="chip test">Stripe test mode</span>
+    {% elif stripe_configured %}<span class="chip live">Stripe live</span>{% endif %}
+  </h1>
+  <div class="filters">
+    <form method="post" action="{% url 'tickets:sync_clients' %}" style="display:inline">
+      {% csrf_token %}
+      <button class="btn subtle" type="submit"
+        title="Push all TimeTrax clients to Stripe (create/link customers, update name/email)">
+        ⇄ Sync clients → Stripe
+      </button>
+    </form>
+    <form method="get" class="filters">
+      <select name="month" onchange="this.form.submit()">
+        {% for m, label in months %}
+          <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <select name="year" onchange="this.form.submit()">
+        {% for y in years %}
+          <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+</div>
+
+{% if not stripe_configured %}
+  <div class="flash error">
+    No Stripe key configured. Copy <b>.env.example</b> → <b>.env</b>, add your
+    <b>STRIPE_SECRET_KEY</b> (start with <b>sk_test_…</b>), then restart the server.
+  </div>
+{% endif %}
+
+<h2>Unbilled hours · {{ month_name }} {{ year }}</h2>
+<div class="card" style="margin-bottom:26px">
+  <table>
+    <thead>
+      <tr>
+        <th>Hourly client</th>
+        <th style="text-align:right">Unbilled hours</th>
+        <th style="text-align:right">Rate</th>
+        <th style="text-align:right">Amount</th>
+        <th style="text-align:right">Draft invoice</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in previews %}
+      <tr>
+        <td><b>{{ p.client.name }}</b>
+          {% if p.client.stripe_customer_id %}<span class="muted" style="font-size:11px"> · Stripe ✓</span>{% endif %}
+        </td>
+        <td style="text-align:right" class="num">{{ p.hours }}</td>
+        <td style="text-align:right" class="num">
+          {% if p.has_rate %}${{ p.rate }}{% else %}<span class="muted">— no rate —</span>{% endif %}
+        </td>
+        <td style="text-align:right" class="num">${{ p.amount }}</td>
+        <td style="text-align:right">
+          {% if p.note_count and p.has_rate %}
+          <form method="post" action="{% url 'tickets:create_invoice' %}" style="display:inline">
+            {% csrf_token %}
+            <input type="hidden" name="client" value="{{ p.client.id }}">
+            <input type="hidden" name="year" value="{{ year }}">
+            <input type="hidden" name="month" value="{{ month }}">
+            <button class="btn" type="submit"
+              onclick="return confirm('Create a DRAFT Stripe invoice for {{ p.client.name }} — {{ p.hours }}h · ${{ p.amount }}?\n\nNothing is sent; you review it in Stripe first.')">
+              Create draft
+            </button>
+          </form>
+          {% else %}
+          <span class="muted">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="5" class="empty">No hourly clients yet. Add one in the <a href="/admin/tickets/client/" style="color:var(--accent);font-weight:600">admin</a> with billing mode = Hourly and an hourly rate.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="help" style="margin-top:-16px">
+  Only hourly clients appear above. Subscription / retainer clients are exempt from
+  hourly billing — they're listed below for reference only.
+</p>
+
+{% if sub_previews %}
+<h2 style="margin-top:26px">On subscription · exempt from hourly billing</h2>
+<div class="card" style="margin-bottom:26px">
+  <table>
+    <thead>
+      <tr>
+        <th>Client</th>
+        <th style="text-align:right">Hours this period (tracked)</th>
+        <th>Stripe subscription</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in sub_previews %}
+      <tr>
+        <td><b>{{ s.client.name }}</b> <span class="muted" style="font-size:11px"> · {{ s.client.get_billing_mode_display }}</span></td>
+        <td style="text-align:right" class="num">{{ s.hours }}</td>
+        <td>
+          {% if s.client.stripe_subscription_id %}
+            <a class="btn subtle" href="{{ s.client.stripe_subscription_url }}" target="_blank" rel="noopener">
+              {{ s.client.stripe_subscription_id }} ↗
+            </a>
+          {% else %}
+            <span class="muted">No subscription id — <a href="/admin/tickets/client/{{ s.client.id }}/change/" style="color:var(--accent);font-weight:600">add it in admin</a></span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<h2 style="margin-top:26px">Recent invoices</h2>
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>Client</th><th>Period</th><th style="text-align:right">Hours</th>
+        <th style="text-align:right">Amount</th><th>Status</th><th>Created</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inv in recent_invoices %}
+      <tr>
+        <td><b>{{ inv.client.name }}</b></td>
+        <td class="muted">{{ inv.period_start|date:"M j" }} – {{ inv.period_end|date:"M j, Y" }}</td>
+        <td style="text-align:right" class="num">{{ inv.total_hours }}</td>
+        <td style="text-align:right" class="num">${{ inv.amount }}</td>
+        <td><span class="chip">{{ inv.get_status_display }}</span></td>
+        <td class="muted">{{ inv.created_at|date:"M j, g:i a" }}</td>
+        <td style="text-align:right">
+          <a class="btn subtle" href="{{ inv.dashboard_url }}" target="_blank" rel="noopener">Open in Stripe ↗</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="empty">No invoices created yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

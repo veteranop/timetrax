@@ -1,0 +1,18 @@
+{% extends "tickets/base.html" %}
+{% block title %}Sign in · TimeTrax{% endblock %}
+{% block content %}
+<div class="card pad" style="max-width:360px;margin:60px auto">
+  <h1 style="margin-bottom:4px">Time<span style="color:var(--accent)">Trax</span></h1>
+  <p class="muted" style="margin:0 0 20px">Sign in to continue.</p>
+  {% if form.errors %}
+    <div style="background:#fdecea;color:#b3261e;padding:10px 12px;border-radius:8px;margin-bottom:14px;font-size:13px">
+      Wrong username or password.
+    </div>
+  {% endif %}
+  <form method="post" class="stack">{% csrf_token %}
+    <div class="field" style="margin:0"><label>Username</label>{{ form.username }}</div>
+    <div class="field" style="margin:0"><label>Password</label>{{ form.password }}</div>
+    <button class="btn" type="submit" style="width:100%">Sign in</button>
+  </form>
+</div>
+{% endblock %}

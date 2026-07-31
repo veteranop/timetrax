@@ -1,0 +1,86 @@
+{% extends "tickets/base.html" %}
+{% block title %}{{ item.ticket_number }} · TimeTrax{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px"><a href="{% url 'tickets:list' %}" class="muted">← All tickets</a></div>
+
+<div class="card pad" style="margin-bottom:16px">
+  <div class="page-head" style="margin-bottom:6px">
+    <div>
+      <h1>
+        <span class="pri {{ item.priority }}">{{ item.get_priority_display }}</span>
+        <span class="num">{{ item.ticket_number }}</span>
+        &nbsp;{{ item.title }}
+      </h1>
+      <div class="meta">
+        <span>Status <span class="badge {{ item.status }}">{{ item.get_status_display }}</span></span>
+        <span>Customer <b>{{ item.client.name }}</b></span>
+        <span>Assignee <b>{{ item.assignee|default:"—" }}</b></span>
+        <span>Total logged <b>{{ item.total_hours }} h</b></span>
+      </div>
+    </div>
+    <form method="post">{% csrf_token %}
+      {% if item.status == 'open' %}
+        <button class="btn danger" name="action" value="close">✓ Close ticket</button>
+      {% else %}
+        <button class="btn subtle" name="action" value="reopen">↻ Reopen</button>
+      {% endif %}
+    </form>
+  </div>
+  {% if item.description %}<p class="muted" style="margin:10px 0 0">{{ item.description|linebreaksbr }}</p>{% endif %}
+</div>
+
+<div class="split" style="margin-bottom:16px">
+  <div class="card pad">
+    <h2>Log work + time</h2>
+    <form method="post">{% csrf_token %}
+      <div class="field"><label>What did you do?</label>{{ work_form.body }}</div>
+      <div class="row2">
+        <div class="field" style="margin:0">
+          <label>Hours</label>{{ work_form.hours }}
+          <div class="help">0.5 = 30 min · 0.25 = 15 min</div>
+        </div>
+        <button class="btn" name="action" value="add_note">Add note</button>
+      </div>
+    </form>
+  </div>
+  <div class="card pad">
+    <h2>Add comment</h2>
+    <form method="post">{% csrf_token %}
+      <div class="field">{{ comment_form.body }}</div>
+      <button class="btn subtle" name="action" value="add_comment">Add comment</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="pad" style="padding-bottom:0"><h2>History</h2></div>
+  <table>
+    <thead>
+      <tr><th>When</th><th>Type</th><th>Entry</th><th style="text-align:right">Hours</th><th>By</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for e in history %}
+      <tr>
+        <td class="muted" style="white-space:nowrap">{{ e.when|date:"M j, g:i a" }}</td>
+        <td>
+          {% if e.kind == 'work' %}<span class="pri L" style="background:#1565c0">Work</span>
+          {% else %}<span class="pri L" style="background:#6a1b9a">{{ e.obj.get_source_display }}</span>{% endif %}
+        </td>
+        <td>{{ e.obj.body|default:"—"|linebreaksbr }}</td>
+        <td style="text-align:right" class="num">{% if e.kind == 'work' %}{{ e.obj.hours }}{% else %}—{% endif %}</td>
+        <td class="muted">{{ e.obj.author|default:"—" }}</td>
+        <td style="text-align:right">
+          {% if e.kind == 'work' %}
+            <a class="edit" href="{% url 'tickets:worknote_edit' e.obj.pk %}" title="Edit">✏️</a>
+          {% else %}
+            <a class="edit" href="{% url 'tickets:comment_edit' e.obj.pk %}" title="Edit">✏️</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="empty">No history yet — log your first note above.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

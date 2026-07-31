@@ -1,0 +1,127 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}TimeTrax{% endblock %}</title>
+  <style>
+    :root{
+      --bg:#f5f6f8; --card:#ffffff; --line:#e4e7eb; --ink:#1f2530;
+      --muted:#6b7280; --accent:#1f6f43; --accent-ink:#fff;
+      --open:#2e7d32; --closed:#9e9e9e;
+      --hi:#c62828; --med:#b45309; --lo:#546e7a;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45}
+    a{color:inherit;text-decoration:none}
+    /* Top nav */
+    header.nav{background:#12241b;color:#fff;padding:0 20px;display:flex;align-items:center;
+      justify-content:space-between;height:54px;position:sticky;top:0;z-index:20}
+    .brand{font-weight:700;font-size:17px;letter-spacing:.3px;color:#fff}
+    .brand span{color:#5cc98a}
+    .nav-right{display:flex;align-items:center;gap:12px}
+    .btn{display:inline-block;padding:8px 14px;border-radius:7px;border:1px solid transparent;
+      font-weight:600;font-size:13px;cursor:pointer;background:var(--accent);color:var(--accent-ink)}
+    .btn:hover{filter:brightness(1.08)}
+    .btn.ghost{background:transparent;border-color:#3a4d42;color:#dfeee6}
+    .btn.subtle{background:#eef0f2;color:var(--ink);border-color:var(--line)}
+    .btn.danger{background:#fff;color:#c62828;border-color:#e6b8b8}
+    /* dropdown menu, pure CSS */
+    details.menu{position:relative}
+    details.menu>summary{list-style:none;cursor:pointer;color:#dfeee6;padding:8px 10px;border-radius:7px;
+      border:1px solid #3a4d42;font-weight:600;font-size:13px}
+    details.menu>summary::-webkit-details-marker{display:none}
+    details.menu>summary:hover{background:#1c3327}
+    .menu-panel{position:absolute;right:0;top:42px;background:#fff;color:var(--ink);border:1px solid var(--line);
+      border-radius:9px;box-shadow:0 8px 28px rgba(0,0,0,.14);min-width:180px;overflow:hidden}
+    .menu-panel a,.menu-panel button{display:block;width:100%;text-align:left;padding:11px 15px;
+      background:none;border:none;font-size:13.5px;cursor:pointer;color:var(--ink)}
+    .menu-panel a:hover,.menu-panel button:hover{background:#f2f4f6}
+    .menu-panel .sep{height:1px;background:var(--line)}
+    /* layout */
+    main{max-width:1040px;margin:26px auto;padding:0 20px}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:12px}
+    .page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:14px;flex-wrap:wrap}
+    h1{font-size:21px;margin:0}
+    h2{font-size:15px;margin:0 0 12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+    /* badges */
+    .badge{display:inline-block;padding:2px 11px;border-radius:11px;color:#fff;font-weight:700;
+      font-size:10.5px;letter-spacing:.4px;text-transform:uppercase}
+    .badge.open{background:var(--open)} .badge.closed{background:var(--closed)}
+    .pri{display:inline-block;padding:1px 8px;border-radius:6px;font-weight:700;font-size:11px;color:#fff}
+    .pri.H{background:var(--hi)} .pri.M{background:var(--med)} .pri.L{background:var(--lo)}
+    /* tables */
+    table{width:100%;border-collapse:collapse;background:var(--card)}
+    thead th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+      padding:11px 14px;border-bottom:1px solid var(--line);font-weight:700}
+    tbody td{padding:12px 14px;border-bottom:1px solid #eef1f4;vertical-align:middle}
+    tbody tr:last-child td{border-bottom:none}
+    tbody tr.click{cursor:pointer}
+    tbody tr.click:hover{background:#f7faf8}
+    .num{font-variant-numeric:tabular-nums;font-weight:700;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    .muted{color:var(--muted)}
+    /* filter bar */
+    .filters{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    select,input[type=text],input[type=password],input[type=number],input[type=email],textarea{font:inherit;padding:8px 10px;border:1px solid var(--line);
+      border-radius:8px;background:#fff;color:var(--ink);width:100%}
+    select{cursor:pointer}
+    .filters select{width:auto;min-width:150px}
+    /* forms */
+    .field{margin-bottom:12px}
+    .field label{display:block;font-weight:600;font-size:12.5px;margin-bottom:5px;color:#374151}
+    .row2{display:grid;grid-template-columns:1fr 130px;gap:12px;align-items:end}
+    .stack{display:flex;flex-direction:column;gap:16px}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    @media(max-width:720px){.split{grid-template-columns:1fr}}
+    .meta{display:flex;gap:22px;flex-wrap:wrap;color:var(--muted);font-size:13px;margin-top:6px}
+    .meta b{color:var(--ink)}
+    .pad{padding:18px}
+    .empty{padding:40px;text-align:center;color:var(--muted)}
+    .edit{color:var(--muted);font-size:15px;opacity:.7}
+    .edit:hover{opacity:1}
+    .help{color:var(--muted);font-size:12px;margin-top:4px}
+    /* flash messages */
+    .flash{padding:12px 16px;border-radius:9px;margin-bottom:16px;font-weight:600;font-size:13.5px;border:1px solid}
+    .flash.success{background:#e8f5ec;color:#1b5e34;border-color:#b6dcc3}
+    .flash.error{background:#fdecec;color:#a12626;border-color:#f0c2c2}
+    /* stat chip */
+    .chip{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;
+      letter-spacing:.3px;text-transform:uppercase;background:#eef0f2;color:var(--muted)}
+    .chip.test{background:#fff4e0;color:#8a5a00}
+    .chip.live{background:#e8f5ec;color:#1b5e34}
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="{% url 'tickets:list' %}">Time<span>Trax</span></a>
+    {% if user.is_authenticated %}
+    <div class="nav-right">
+      <a class="btn" href="{% url 'tickets:create' %}">+ New Ticket</a>
+      <a class="btn ghost" href="{% url 'tickets:billing' %}">Billing</a>
+      <details class="menu">
+        <summary>⚙ Menu ▾</summary>
+        <div class="menu-panel">
+          <a href="{% url 'tickets:list' %}">All tickets</a>
+          <a href="{% url 'tickets:billing' %}">Billing</a>
+          <a href="/admin/">Admin panel</a>
+          <div class="sep"></div>
+          <div style="padding:9px 15px;font-size:12px;color:#6b7280">Signed in as <b>{{ user }}</b></div>
+          <form method="post" action="{% url 'logout' %}">{% csrf_token %}
+            <button type="submit">Log out</button>
+          </form>
+        </div>
+      </details>
+    </div>
+    {% endif %}
+  </header>
+  <main>
+    {% if messages %}
+      {% for message in messages %}
+        <div class="flash {{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
