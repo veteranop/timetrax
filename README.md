@@ -27,6 +27,29 @@ into draft invoices, plus an n8n hook for AI-assisted ticket triage.
 - `scripts/tt` — CLI for querying/managing tickets without the web server
 - Django admin with a full activity timeline
 
+## Built for agentic work
+
+TimeTrax is designed to be driven by an agent as easily as by a human at the
+keyboard — it isn't tied to any one automation stack.
+
+- **REST API** (`/api/tickets/`, Bearer token auth) — list/create/update
+  tickets, close/reopen, reassign, and post comments. Anything a human can
+  do from the ticket detail page, an agent can do over plain HTTP/JSON.
+- **`Comment.source`** — every comment is tagged `human`, `system`, or
+  `hermes` (API-posted comments default to `hermes`), so the activity
+  timeline always shows whether an entry came from a person or an agent.
+- **`tt` CLI** — the same operations from a terminal (`tt work <id> <hours>
+  "..."`, `tt comment <id> "..."`) for agents that would rather shell out
+  than make HTTP calls.
+- **n8n triage webhook** (below) — new tickets are pushed out for AI
+  classification automatically, no polling required.
+
+None of this is coupled to a specific agent runner — it's been driven by a
+home-lab ops agent (referred to as "Hermes" in the code/docs), and the same
+Bearer-token REST API works just as well from an n8n workflow, an
+OpenClaw-style agent loop, or any other automation that can send an HTTP
+request.
+
 ## Setup
 
 ```bash
