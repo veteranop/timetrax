@@ -14,6 +14,9 @@ db.sqlite3
 .env.*
 !.env.example
 
+# n8n runtime data (contains API keys in sqlite, logs, etc.)
+scripts/n8n/data/
+
 # OS / editor
 .DS_Store
 .idea/

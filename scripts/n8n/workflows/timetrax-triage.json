@@ -1,0 +1,61 @@
+{
+  "id": "timetrax-triage-001",
+  "name": "TimeTrax AI Ticket Triage",
+  "active": false,
+  "settings": {},
+  "nodes": [
+    {
+      "name": "Webhook - Ticket Created",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "parameters": {
+        "path": "timetrax-triage",
+        "options": {}
+      }
+    },
+    {
+      "name": "AI Triage Classifier",
+      "type": "n8n-nodes-base.aiAgent",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "parameters": {
+        "prompt": "You are a helpdesk triage agent. Classify this ticket and respond with JSON only:\n\nTitle: {{$json.title}}\nDescription: {{$json.description}}\n\nClassify as one of: password_reset, hardware_issue, software_bug, account_access, security_alert, general_inquiry\n\nRespond with JSON: {\"category\": \"...\", \"priority\": \"H|M|L\", \"summary\": \"1-line summary\", \"response_suggestion\": \"what to do first\"}",
+        "model": "gpt-4o-mini",
+        "apiKey": "={{ $env.OPENAI_API_KEY }}"
+      }
+    },
+    {
+      "name": "Auto-Reply (Password Reset)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [650, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8001/api/tickets/{{ $json.ticket_id }}/comments/",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "={{ \"Bearer \" + $env.TIMETRAX_API_KEY }}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "body", "value": "{{ $json.auto_response }}"},
+            {"name": "source", "value": "system"}
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook - Ticket Created": {
+      "main": [[{"node": "AI Triage Classifier", "type": "main", "index": 0}]]
+    },
+    "AI Triage Classifier": {
+      "main": [[{"node": "Auto-Reply (Password Reset)", "type": "main", "index": 0}]]
+    }
+  }
+}
