@@ -1,5 +1,8 @@
 # TimeTrax
 
+[![tests](https://github.com/veteranop/timetrax/actions/workflows/tests.yml/badge.svg)](https://github.com/veteranop/timetrax/actions/workflows/tests.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A self-hosted ticket + time-tracking web app, built on Django. Create a ticket,
 log work notes with hours as you go, close it out, and hours auto-sum into
 billable time per client. Includes Stripe integration for turning logged hours

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # TimeTrax on Ubuntu 24.04 (EC2) — Gunicorn + Caddy (auto-TLS) + systemd
 # Run as: sudo DOMAIN=tt.example.com bash deploy_timetrax.sh
-# For IP-only testing (no TLS): sudo DOMAIN=54.147.15.17 bash deploy_timetrax.sh
+# For IP-only testing (no TLS): sudo DOMAIN=198.51.100.10 bash deploy_timetrax.sh
+#   (198.51.100.0/24 is the RFC 5737 documentation range — substitute your own host/IP.)
 set -euo pipefail
 
 DOMAIN="${DOMAIN:?Set DOMAIN=your.hostname (or the public IP for http-only testing)}"
