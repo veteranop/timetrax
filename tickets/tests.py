@@ -1,7 +1,8 @@
 import types
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from unittest import mock
+from django.utils import timezone
 
 from django.test import TestCase, override_settings
 
@@ -67,6 +68,14 @@ class BillingFlowTests(TestCase):
         for h in ("4.00", "3.25", "10.00"):
             WorkNote.objects.create(item=item, author=self.mark, body="work", hours=Decimal(h))
         self.start, self.end = date(2026, 7, 1), date(2026, 7, 31)
+        # WorkNote.created_at is auto_now_add, so the notes above land on "today" and
+        # fall outside the July-2026 billing period for any clock after July 2026 —
+        # these tests used to pass only while the calendar happened to say July.
+        # Backdate them into the period explicitly (auto_now_add ignores values on
+        # create, so update() is the way in).
+        WorkNote.objects.update(
+            created_at=timezone.make_aware(datetime(2026, 7, 15, 12, 0))
+        )
 
     def test_creates_draft_invoice_and_marks_hours(self):
         fake = _fake_stripe()
